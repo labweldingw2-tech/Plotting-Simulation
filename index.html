@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title>Automatic Plotting</title>
+    
+
+  </head>
+    
+  <body>
+  <!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>UT Plotting Tool - Vector Mode with Reinforcement</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; display: flex; gap: 15px; padding: 20px; background: #1a1a1a; color: #eee; height: 100vh; margin: 0; box-sizing: border-box; }
+        .controls { background: #2d2d2d; padding: 20px; border-radius: 12px; width: 350px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); overflow-y: auto; }
+        .canvas-container { flex-grow: 1; background: #333; padding: 15px; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: auto; }
+        canvas { background: #fff; border: 2px solid #555; display: block; box-shadow: 0 0 20px rgba(0,0,0,0.3); }
+        
+        h3 { color: #e67e22; margin: 0 0 15px 0; text-align: center; border-bottom: 2px solid #e67e22; padding-bottom: 10px; }
+        h4 { margin: 15px 0 8px 0; color: #3498db; font-size: 0.85em; text-transform: uppercase; }
+        
+        .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+        label { display: block; font-size: 0.75em; margin-bottom: 4px; color: #bbb; }
+        input[type="number"], select { width: 100%; background: #1a1a1a; border: 1px solid #444; color: #2ecc71; padding: 8px; border-radius: 4px; font-weight: bold; font-family: 'Courier New', monospace; box-sizing: border-box; }
+        select { color: #e67e22; cursor: pointer; }
+        
+        .stats { margin-top: 15px; font-family: 'Courier New', monospace; font-size: 0.85em; background: #111; padding: 12px; border-radius: 5px; border-left: 4px solid #e67e22; }
+        .result-val { color: #e67e22; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="controls">
+    <h3>UT VECTOR PLOT</h3>
+    
+    <h4>Weld Configuration</h4>
+    <div style="margin-bottom: 15px;">
+        <label>Joint Type</label>
+        <select id="jointType">
+            <option value="singleV">Single V Groove</option>
+            <option value="doubleV">Double V Groove</option>
+            <option value="singleBevel">Single Bevel</option>
+        </select>
+    </div>
+
+    <h4>Material & Weld</h4>
+    <div class="input-grid">
+        <div><label>Thickness (t)</label><input type="number" id="t" value="20"></div>
+        <div><label>Root Opening</label><input type="number" id="root" value="3"></div>
+        <div><label>Bevel Angle</label><input type="number" id="bevel" value="30"></div>
+    </div>
+
+    <h4>Reinforcement (Cap)</h4>
+    <div class="input-grid">
+        <div><label>Cap Height</label><input type="number" id="reinfH" value="3"></div>
+        <div><label>Cap Width</label><input type="number" id="reinfW" value="25"></div>
+    </div>
+
+    <h4>Probe & Indication</h4>
+    <div class="input-grid">
+        <div><label>Probe Angle (θ)</label><input type="number" id="angle" value="70"></div>
+        <div><label>Dist. to CL (X)</label><input type="number" id="probeX" value="80"></div>
+    </div>
+    <div style="margin-top:10px;">
+        <label>Sound Path (S) - Active Vector</label>
+        <input type="number" id="soundPath" value="45" step="0.5">
+    </div>
+
+    <div class="stats" id="calc-info">...</div>
+    <div class="stats" id="defect-stats" style="border-left-color: #3498db;">...</div>
+</div>
+
+<div class="canvas-container">
+    <canvas id="plotCanvas" width="900" height="700"></canvas>
+</div>
+
+<script>
+    const canvas = document.getElementById('plotCanvas');
+    const ctx = canvas.getContext('2d');
+    const inputIds = ['t', 'angle', 'probeX', 'soundPath', 'bevel', 'root', 'reinfH', 'reinfW', 'jointType'];
+    const SCALE = 5; 
+    const CENTER_X = 450;
+
+    function drawWatermark() {
+        ctx.save();
+        ctx.textAlign = "left";
+        ctx.fillStyle = "rgba(100, 100, 100, 0.25)"; 
+        ctx.font = "bold 13px Arial";
+        ctx.fillText("Asrafi, STr.T", 20, canvas.height - 55);
+        ctx.font = "11px Arial";
+        ctx.fillText("ASNT LEVEL II", 20, canvas.height - 40);
+        ctx.fillText("Politeknik Negeri Batam", 20, canvas.height - 25);
+        ctx.restore();
+    }
+
+    function drawWeld(x, y, t, root, bevel, reinfH, reinfW, isMirrored, type) {
+        const radBevel = bevel * Math.PI / 180;
+        const tScale = t * SCALE;
+        const rootHalf = (root/2) * SCALE;
+        const rHS = reinfH * SCALE;
+        const rWS_Half = (reinfW / 2) * SCALE;
+
+        ctx.save();
+        if(isMirrored) {
+            ctx.translate(0, y + tScale); ctx.scale(1, -1); ctx.translate(0, -y);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.03)';
+        } else {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+        }
+        
+        ctx.beginPath();
+        if (type === 'singleV') {
+            const topWeldHalf = rootHalf + (tScale * Math.tan(radBevel));
+            ctx.moveTo(x - topWeldHalf, y);
+            ctx.lineTo(x + topWeldHalf, y);
+            ctx.lineTo(x + rootHalf, y + tScale);
+            ctx.lineTo(x - rootHalf, y + tScale);
+        } 
+        else if (type === 'doubleV') {
+            const midWeldHalf = rootHalf + ((tScale/2) * Math.tan(radBevel));
+            ctx.moveTo(x - rootHalf, y);
+            ctx.lineTo(x + rootHalf, y);
+            ctx.lineTo(x + midWeldHalf, y + (tScale/2));
+            ctx.lineTo(x + rootHalf, y + tScale);
+            ctx.lineTo(x - rootHalf, y + tScale);
+            ctx.lineTo(x - midWeldHalf, y + (tScale/2));
+        }
+        else if (type === 'singleBevel') {
+            const topWeldWidth = rootHalf*2 + (tScale * Math.tan(radBevel));
+            ctx.moveTo(x - rootHalf, y);
+            ctx.lineTo(x - rootHalf + topWeldWidth, y);
+            ctx.lineTo(x + rootHalf, y + tScale);
+            ctx.lineTo(x - rootHalf, y + tScale);
+        }
+        
+        ctx.closePath();
+        ctx.fill(); ctx.strokeStyle = '#999'; ctx.stroke();
+
+        // Reinforcement (Cap)
+        if (reinfH > 0) {
+            ctx.beginPath();
+            let capCenterX = x;
+            if(type === 'singleBevel') capCenterX = x + (reinfW/2 - root/2 - 2)*SCALE; // Offset cap untuk bevel
+            
+            ctx.moveTo(capCenterX - rWS_Half, y);
+            ctx.quadraticCurveTo(capCenterX, y - (rHS * 2), capCenterX + rWS_Half, y);
+            if(!isMirrored) ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
+            ctx.fill(); ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    function update() {
+        const t = parseFloat(document.getElementById('t').value) || 0;
+        const angle = parseFloat(document.getElementById('angle').value) || 0;
+        const distFromCL = parseFloat(document.getElementById('probeX').value) || 0;
+        const sPath = parseFloat(document.getElementById('soundPath').value) || 0;
+        const bevel = parseFloat(document.getElementById('bevel').value) || 0;
+        const root = parseFloat(document.getElementById('root').value) || 0;
+        const reinfH = parseFloat(document.getElementById('reinfH').value) || 0;
+        const reinfW = parseFloat(document.getElementById('reinfW').value) || 0;
+        const jointType = document.getElementById('jointType').value;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Grid
+        ctx.strokeStyle = '#eee'; ctx.lineWidth = 0.5;
+        for(let i=0; i<canvas.width; i+=5) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); ctx.stroke(); }
+        for(let i=0; i<canvas.height; i+=5) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(canvas.width,i); ctx.stroke(); }
+
+        drawWatermark();
+
+        const startY = 150; 
+        const tScale = t * SCALE;
+        const pX = CENTER_X + (distFromCL * SCALE);
+        const shootDir = distFromCL > 0 ? -1 : 1; 
+        const rad = angle * (Math.PI / 180);
+
+        // Draw Plates
+        ctx.lineWidth = 2; ctx.strokeStyle = '#333';
+        ctx.strokeRect(50, startY, canvas.width-100, tScale);
+        ctx.setLineDash([5,5]); ctx.strokeRect(50, startY + tScale, canvas.width-100, tScale);
+        ctx.setLineDash([]);
+
+        // Draw Welds
+        drawWeld(CENTER_X, startY, t, root, bevel, reinfH, reinfW, false, jointType);
+        drawWeld(CENTER_X, startY + tScale, t, root, bevel, reinfH, reinfW, true, jointType);
+
+        // Centerline
+        ctx.strokeStyle = '#e74c3c'; ctx.setLineDash([10,5]);
+        ctx.beginPath(); ctx.moveTo(CENTER_X, startY-20); ctx.lineTo(CENTER_X, startY+(tScale*2)+20); ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Physics Logic
+        const fullSP1 = t / Math.cos(rad);
+        const fullSD1 = t * Math.tan(rad);
+        
+        ctx.lineWidth = 3;
+        if (sPath <= fullSP1) {
+            const currentSD = sPath * Math.sin(rad);
+            const currentDepth = sPath * Math.cos(rad);
+            ctx.beginPath(); ctx.strokeStyle = '#f39c12';
+            ctx.moveTo(pX, startY);
+            ctx.lineTo(pX + (currentSD * SCALE * shootDir), startY + (currentDepth * SCALE));
+            ctx.stroke();
+        } else {
+            ctx.beginPath(); ctx.strokeStyle = '#f39c12';
+            ctx.moveTo(pX, startY);
+            const l1EndX = pX + (fullSD1 * SCALE * shootDir);
+            ctx.lineTo(l1EndX, startY + tScale);
+            ctx.stroke();
+
+            const remainingSP = sPath - fullSP1;
+            const currentSD2 = remainingSP * Math.sin(rad);
+            const currentDepthFromBottom = remainingSP * Math.cos(rad);
+            ctx.beginPath(); ctx.strokeStyle = '#e74c3c';
+            ctx.moveTo(l1EndX, startY + tScale);
+            const l2EndX = l1EndX + (currentSD2 * SCALE * shootDir);
+            ctx.lineTo(l2EndX, startY + tScale - (currentDepthFromBottom * SCALE));
+            ctx.stroke();
+        }
+
+        const finalSD = sPath * Math.sin(rad);
+        let finalDepth;
+        if(sPath <= fullSP1) finalDepth = sPath * Math.cos(rad);
+        else finalDepth = t - ((sPath - fullSP1) * Math.cos(rad));
+        
+        const finalX = pX + (finalSD * SCALE * shootDir);
+        const finalY = startY + (finalDepth * SCALE);
+
+        ctx.beginPath(); ctx.arc(finalX, finalY, 5, 0, Math.PI*2);
+        ctx.fillStyle = '#f1c40f'; ctx.fill(); ctx.stroke();
+
+        document.getElementById('calc-info').innerHTML = `
+            Current Leg: <span class="result-val">${sPath <= fullSP1 ? '1' : '2'}</span><br>
+            SD from Probe: <span class="result-val">${finalSD.toFixed(1)} mm</span><br>
+            Depth (d): <span class="result-val">${finalDepth.toFixed(1)} mm</span>
+        `;
+        
+        const distToCL = (finalX - CENTER_X) / SCALE;
+        
+        // Cek status "IN WELD" berdasarkan tipe joint
+        let isInWeld = false;
+        const absDist = Math.abs(distToCL);
+        if (jointType === 'singleV') {
+            const currentWeldWidth = (root/2) + (finalDepth * Math.tan(bevel * Math.PI / 180));
+            isInWeld = absDist <= currentWeldWidth;
+        } else if (jointType === 'doubleV') {
+            const dMid = t/2;
+            const distFromMid = Math.abs(finalDepth - dMid);
+            const currentWeldWidth = (root/2) + ((dMid - distFromMid) * Math.tan(bevel * Math.PI / 180));
+            isInWeld = absDist <= currentWeldWidth;
+        } else if (jointType === 'singleBevel') {
+            const topBound = (finalDepth * Math.tan(bevel * Math.PI / 180)) + root/2;
+            isInWeld = distToCL >= -root/2 && distToCL <= topBound;
+        }
+
+        document.getElementById('defect-stats').innerHTML = `
+            Dist. to CL: <span class="result-val">${distToCL.toFixed(1)} mm</span><br>
+            Status: <span class="result-val">${isInWeld ? 'IN WELD' : 'BASE METAL'}</span>
+        `;
+    }
+
+    inputIds.forEach(id => document.getElementById(id).addEventListener('input', update));
+    update();
+</script>
+
+</body>
+</html>
+    
+  </body>
+  
+</html>
